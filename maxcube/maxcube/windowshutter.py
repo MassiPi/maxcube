@@ -1,4 +1,4 @@
-from maxcube.device import MaxDevice
+from .device import MaxDevice
 
 
 class MaxWindowShutter(MaxDevice):

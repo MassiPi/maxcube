@@ -14,6 +14,14 @@ MAX_DEVICE_MODE_BOOST = 3
 
 MAX_DEVICE_BATTERY_OK = 0
 MAX_DEVICE_BATTERY_LOW = 1
+MAX_DEVICE_PANEL_UNLOCKED = 0
+MAX_DEVICE_PANEL_LOCKED = 1
+MAX_DEVICE_LINK_STATUS_OK = 0
+MAX_DEVICE_LINK_STATUS_ERROR = 1
+MAX_DEVICE_STATUS_NOT_INITIALIZED = 0
+MAX_DEVICE_STATUS_INITIALIZED = 1
+MAX_DEVICE_ERROR_NO = 0
+MAX_DEVICE_ERROR_YES = 1
 
 MODE_NAMES = {
     MAX_DEVICE_MODE_AUTOMATIC: "auto",
@@ -32,6 +40,9 @@ class MaxDevice(object):
         self.serial = None
         self.battery = None
         self.programme = None
+
+    def is_cube(self):
+        return self.type == MAX_CUBE
 
     def is_thermostat(self):
         return self.type in (MAX_THERMOSTAT, MAX_THERMOSTAT_PLUS)
@@ -67,6 +78,14 @@ class MaxDevice(object):
             "eco_temperature",
             "max_temperature",
             "min_temperature",
+            "temperature_offset",
+            "temperature_window_open",
+            "boost_duration",
+            "boost_value",
+            "decalc_day",
+            "decalc_time",
+            "max_valve",
+            "valve_offset",
             "valve_position",
             "target_temperature",
             "actual_temperature",

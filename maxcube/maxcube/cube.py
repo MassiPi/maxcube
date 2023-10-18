@@ -5,7 +5,7 @@ import logging
 import struct
 from typing import Callable
 
-from maxcube.device import (
+from .device import (
     MAX_CUBE,
     MAX_DEVICE_MODE_AUTOMATIC,
     MAX_DEVICE_MODE_MANUAL,
@@ -15,10 +15,10 @@ from maxcube.device import (
     MAX_WINDOW_SHUTTER,
     MaxDevice,
 )
-from maxcube.room import MaxRoom
-from maxcube.thermostat import MaxThermostat
-from maxcube.wallthermostat import MaxWallThermostat
-from maxcube.windowshutter import MaxWindowShutter
+from .room import MaxRoom
+from .thermostat import MaxThermostat
+from .wallthermostat import MaxWallThermostat
+from .windowshutter import MaxWindowShutter
 
 from .commander import Commander
 
@@ -143,12 +143,26 @@ class MaxCube(MaxDevice):
             device.min_temperature = data[21] / 2.0
             device.programme = get_programme(data[29:])
 
+            device.temperature_offset = data[22] / 2.0 -3.5
+            device.temperature_window_open = data[23] / 2.0
+            device.window_open_duration = data[24]
+            
+            device.boost_duration = int(self.resolve_boost_duration(data[25:26]))
+            device.boost_value = int(self.resolve_boost_value(data[25:26]))
+            
+            device.decalc_day = int(self.resolve_decalc_day(data[26:27]))
+            device.decalc_time = int(self.resolve_decalc_time(data[26:27]))
+
+            device.max_valve = int(data[27]*100/255)
+            device.valve_offset = int(data[28]*100/255)
+
         if device and device.is_wallthermostat():
             device.comfort_temperature = data[18] / 2.0
             device.eco_temperature = data[19] / 2.0
             device.max_temperature = data[20] / 2.0
             device.min_temperature = data[21] / 2.0
-
+            device.programme = get_programme(data[22:204])
+            
         if device and device.is_windowshutter():
             # Pure Speculation based on this:
             # Before: [17][12][162][178][4][0][20][15]KEQ0839778
@@ -232,17 +246,21 @@ class MaxCube(MaxDevice):
             device_rf_address = self.parse_rf_address(data[pos + 1 : pos + 4])
 
             device = self.device_by_rf(device_rf_address)
-
+            bits1, bits2 = struct.unpack("BB", bytearray(data[pos + 5 : pos + 7]))
+            
             if device:
                 bits1, bits2 = struct.unpack("BB", bytearray(data[pos + 5 : pos + 7]))
                 device.battery = self.resolve_device_battery(bits2)
-
+                device.link_error = self.resolve_device_link_error(bits2)
+                device.initialized = self.resolve_device_initialized(bits1)
+                device.error = self.resolve_device_error(bits1)
+                
             # Thermostat or Wall Thermostat
             if device and (device.is_thermostat() or device.is_wallthermostat()):
                 device.target_temperature = (data[pos + 8] & 0x7F) / 2.0
-                bits1, bits2 = struct.unpack("BB", bytearray(data[pos + 5 : pos + 7]))
                 device.mode = self.resolve_device_mode(bits2)
-
+                device.panel_locked = self.resolve_device_panel_locked(bits2)
+                
             # Thermostat
             if device and device.is_thermostat():
                 device.valve_position = data[pos + 7]
@@ -289,34 +307,47 @@ class MaxCube(MaxDevice):
             thermostat.rf_address,
         )
 
-        if not thermostat.is_thermostat() and not thermostat.is_wallthermostat():
-            logger.error("%s is no (wall-)thermostat!", thermostat.rf_address)
+        if not thermostat.is_thermostat() and not thermostat.is_wallthermostat() and not thermostat.is_cube():
+            logger.error("%s is no (wall-)thermostat or cube!", thermostat.rf_address)
             return
-
-        if mode is None:
-            mode = thermostat.mode
-        if temperature is None:
-            temperature = (
-                0
-                if mode == MAX_DEVICE_MODE_AUTOMATIC
-                else thermostat.target_temperature
-            )
-
-        rf_address = thermostat.rf_address
-        room = to_hex(thermostat.room_id)
-        target_temperature = int(temperature * 2) + (mode << 6)
-
-        byte_cmd = "000440000000" + rf_address + room + to_hex(target_temperature)
-        if self.__commander.send_radio_msg(byte_cmd):
-            thermostat.mode = mode
-            if temperature > 0:
-                thermostat.target_temperature = int(temperature * 2) / 2.0
-            elif mode == MAX_DEVICE_MODE_AUTOMATIC:
-                thermostat.target_temperature = thermostat.get_programmed_temp_at(
-                    self._now()
+        
+        if not thermostat.is_cube():
+            if mode is None:
+                mode = thermostat.mode
+            if temperature is None:
+                temperature = (
+                    0
+                    if mode == MAX_DEVICE_MODE_AUTOMATIC
+                    else thermostat.target_temperature
                 )
-            return True
-        return False
+
+            rf_address = thermostat.rf_address
+            room = to_hex(thermostat.room_id)
+            target_temperature = int(temperature * 2) + (mode << 6)
+            byte_cmd = "000440000000" + rf_address + room + to_hex(target_temperature)
+            if self.__commander.send_radio_msg(byte_cmd):
+                thermostat.mode = mode
+                if temperature > 0:
+                    thermostat.target_temperature = int(temperature * 2) / 2.0
+                elif mode == MAX_DEVICE_MODE_AUTOMATIC:
+                    thermostat.target_temperature = thermostat.get_programmed_temp_at(
+                        self._now()
+                    )
+                return True
+            return False
+        else:
+            if mode is None or temperature is None:
+                logger.error("Can't manage cube command without mode and temp")
+                return
+
+            rf_address = thermostat.rf_address
+            room = to_hex(0)
+            target_temperature = int(temperature * 2) + (mode << 6)       
+
+            byte_cmd = "000440000000" + rf_address + room + to_hex(target_temperature)
+            if self.__commander.send_radio_msg(byte_cmd):
+                return True
+            return False
 
     def set_programme(self, thermostat, day, metadata):
         # compare with current programme
@@ -366,13 +397,46 @@ class MaxCube(MaxDevice):
         return bits & 3
 
     @classmethod
+    def resolve_device_panel_locked(cls, bits):
+        return 1 if bits & 0b00100000 else 0
+
+    @classmethod
+    def resolve_device_link_error(cls, bits):
+        return 1 if bits & 0b01000000 else 0
+
+    @classmethod
     def resolve_device_battery(cls, bits):
         return bits >> 7
+
+    @classmethod
+    def resolve_device_initialized(cls, bits):
+        return 1 if bits & 0b00000010 else 0
+
+    @classmethod
+    def resolve_device_error(cls, bits):
+        return 1 if bits & 0b00001000 else 0
 
     @classmethod
     def parse_rf_address(cls, address):
         return "".join("{:02X}".format(x) for x in address)
 
+
+    @classmethod
+    def resolve_boost_duration(cls, bits):
+        bits = struct.unpack("B", bytearray(bits))
+        return int((bits[0] & 0b11100000) >> 5)*5
+    @classmethod
+    def resolve_boost_value(cls, bits):
+        bits = struct.unpack("B", bytearray(bits))
+        return int((bits[0] & 0b00011111))*5
+    @classmethod
+    def resolve_decalc_day(cls, bits):
+        bits = struct.unpack("B", bytearray(bits))
+        return int((bits[0] & 0b11100000) >> 5)
+    @classmethod
+    def resolve_decalc_time(cls, bits):
+        bits = struct.unpack("B", bytearray(bits))
+        return int((bits[0] & 0b00011111))
 
 def get_programme(bits):
     n = 26
@@ -384,7 +448,7 @@ def get_programme(bits):
         day_programme = []
         for setting in settings:
             word = format(setting[0], "08b") + format(setting[1], "08b")
-            temp = int(int(word[:7], 2) / 2)
+            temp = float(int(word[:7], 2) / 2)
             time_mins = int(word[7:], 2) * 5
             mins = time_mins % 60
             hours = int((time_mins - mins) / 60)

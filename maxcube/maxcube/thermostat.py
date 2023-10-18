@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Dict, List
 
-from maxcube.device import MODE_NAMES, MaxDevice
+from .device import MODE_NAMES, MaxDevice
 
 PROG_DAYS = [
     "monday",
@@ -24,6 +24,17 @@ class MaxThermostat(MaxDevice):
         self.valve_position = None
         self.target_temperature = None
         self.actual_temperature = None
+        
+        self.temperature_offset = None
+        self.temperature_window_open = None
+        self.window_open_duration = None
+        self.boost_duration = None
+        self.boost_value = None
+        self.decalc_day = None
+        self.decalc_time = None
+        self.max_valve = None
+        self.valve_offset = None
+            
         self.mode = None
         self.programme: Dict[str, List[Dict[str, int]]] = {}
 
@@ -37,10 +48,20 @@ class MaxThermostat(MaxDevice):
             f"comfort={self.comfort_temperature}",
             f"range=[{self.min_temperature},{self.max_temperature}]",
             f"valve={self.valve_position}",
+            f"TempOffset={self.temperature_offset}",
+            f"windowOpen={self.temperature_window_open}",
+            f"windowOpenDuration={self.window_open_duration}",
+            f"boostDuration={self.boost_duration}",
+            f"boostValue={self.boost_value}",
+            f"decalcDay={self.decalc_day}",
+            f"decalcTime={self.decalc_time}",
+            f"maxValve={self.max_valve}",
+            f"valveOffset={self.valve_offset}",
         )
 
     def get_programmed_temp_at(self, dt: datetime):
         """Retrieve the programmed temperature at the given instant."""
+        if ( dt is None ): dt = datetime.now()
         weekday = PROG_DAYS[dt.weekday()]
         time = f"{dt.hour:02}:{dt.minute:02}"
         for point in self.programme.get(weekday, []):
