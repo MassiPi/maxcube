@@ -4,7 +4,7 @@ from socket import timeout
 from threading import Lock
 import time
 
-from maxcube.cube import MaxCube
+from .maxcube.cube import MaxCube
 import voluptuous as vol
 
 from homeassistant.components import persistent_notification
@@ -83,6 +83,7 @@ def setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     load_platform(hass, Platform.CLIMATE, DOMAIN, {}, config)
     load_platform(hass, Platform.BINARY_SENSOR, DOMAIN, {}, config)
+    load_platform(hass, Platform.SENSOR, DOMAIN, {}, config)
 
     return True
 

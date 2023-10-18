@@ -24,6 +24,7 @@ def setup_platform(
     for handler in hass.data[DATA_KEY].values():
         for device in handler.cube.devices:
             devices.append(MaxCubeBattery(handler, device))
+            devices.append(MaxCubeLink(handler, device))
             # Only add Window Shutters
             if device.is_windowshutter():
                 devices.append(MaxCubeShutter(handler, device))
@@ -81,3 +82,20 @@ class MaxCubeBattery(MaxCubeBinarySensorBase):
     def is_on(self):
         """Return true if the binary sensor is on/open."""
         return self._device.battery == 1
+
+class MaxCubeLink(MaxCubeBinarySensorBase):
+    """Representation of a MAX! Cube Link Sensor device."""
+
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+
+    def __init__(self, handler, device):
+        """Initialize MAX! Cube BinarySensorEntity."""
+        super().__init__(handler, device)
+
+        self._attr_name = f"{self._room.name} {device.name} link error"
+        self._attr_unique_id = f"{self._device.serial}_link_error"
+
+    @property
+    def is_on(self):
+        """Return true if the binary sensor is on/open."""
+        return self._device.link_error == 1
