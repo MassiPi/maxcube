@@ -80,7 +80,7 @@ def setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     if connection_failed >= len(gateways):
         return False
-
+        
     load_platform(hass, Platform.CLIMATE, DOMAIN, {}, config)
     load_platform(hass, Platform.BINARY_SENSOR, DOMAIN, {}, config)
     load_platform(hass, Platform.SENSOR, DOMAIN, {}, config)
@@ -94,7 +94,7 @@ class MaxCubeHandle:
     def __init__(self, cube, scan_interval):
         """Initialize the Cube Handle."""
         self.cube = cube
-        self.cube.use_persistent_connection = scan_interval <= 300  # seconds
+        self.cube.use_persistent_connection = True  # seconds
         self.scan_interval = scan_interval
         self.mutex = Lock()
         self._updatets = time.monotonic()
@@ -104,8 +104,8 @@ class MaxCubeHandle:
         # Acquire mutex to prevent simultaneous update from multiple threads
         with self.mutex:
             # Only update every update_interval
-            if (time.monotonic() - self._updatets) >= self.scan_interval:
-                _LOGGER.debug("Updating")
+            if ((time.monotonic() - self._updatets) >= self.scan_interval):
+                _LOGGER.info("Updating: monotonic %s, updatets %s, delta %s, scan_interval: %s, time %s", time.monotonic(), self._updatets, (time.monotonic() - self._updatets), self.scan_interval, time.time())
 
                 try:
                     self.cube.update()
@@ -114,5 +114,3 @@ class MaxCubeHandle:
                     return False
 
                 self._updatets = time.monotonic()
-            else:
-                _LOGGER.debug("Skipping update")

@@ -13,10 +13,10 @@ QUIT_MSG = Message("q")
 L_MSG = Message("l")
 L_REPLY_CMD = L_MSG.reply_cmd()
 
-UPDATE_TIMEOUT = Timeout("update", 3.0)
-CONNECT_TIMEOUT = Timeout("connect", 3.0)
+UPDATE_TIMEOUT = Timeout("update", 2.0)
+CONNECT_TIMEOUT = Timeout("connect", 2.0)
 FLUSH_INPUT_TIMEOUT = Timeout("flush-input", 0)
-SEND_RADIO_MSG_TIMEOUT = Timeout("send-radio-msg", 30.0)
+SEND_RADIO_MSG_TIMEOUT = Timeout("send-radio-msg", 2.0)
 CMD_REPLY_TIMEOUT = Timeout("cmd-reply", 2.0)
 
 
@@ -74,11 +74,11 @@ class Commander(object):
             response = self.__call(request, deadline)
             duty_cycle, status_code, free_slots = response.arg.split(",", 3)
             if status_code == "0":
+                logger.debug(
+                    "Radio message %s was sent [DutyCycle:%s, StatusCode:%s, FreeSlots:%s]"
+                    % (request, duty_cycle, status_code, free_slots)
+                )
                 return True
-            logger.debug(
-                "Radio message %s was not send [DutyCycle:%s, StatusCode:%s, FreeSlots:%s]"
-                % (request, duty_cycle, status_code, free_slots)
-            )
             if int(duty_cycle, 16) == 100 and int(free_slots, 16) == 0:
                 sleep(deadline.remaining(upper_bound=10.0))
         except Exception as ex:

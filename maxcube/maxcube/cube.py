@@ -22,6 +22,10 @@ from .windowshutter import MaxWindowShutter
 
 from .commander import Commander
 
+from homeassistant.components.climate import (
+    HVACMode,
+)
+
 logger = logging.getLogger(__name__)
 
 CMD_SET_PROG = "10"
@@ -300,20 +304,18 @@ class MaxCube(MaxDevice):
         return self.set_temperature_mode(thermostat, None, mode)
 
     def set_temperature_mode(self, thermostat, temperature, mode):
-        logger.debug(
-            "Setting temperature %s and mode %s on %s!",
-            temperature,
-            mode,
-            thermostat.rf_address,
-        )
-
         if not thermostat.is_thermostat() and not thermostat.is_wallthermostat() and not thermostat.is_cube():
             logger.error("%s is no (wall-)thermostat or cube!", thermostat.rf_address)
             return
-        
+
         if not thermostat.is_cube():
-            if mode is None:
+            if mode == HVACMode.AUTO:
+                mode = MAX_DEVICE_MODE_AUTOMATIC
+            elif mode == HVACMode.HEAT:
+                mode = MAX_DEVICE_MODE_MANUAL
+            elif mode is None:
                 mode = thermostat.mode
+                
             if temperature is None:
                 temperature = (
                     0
@@ -325,6 +327,17 @@ class MaxCube(MaxDevice):
             room = to_hex(thermostat.room_id)
             target_temperature = int(temperature * 2) + (mode << 6)
             byte_cmd = "000440000000" + rf_address + room + to_hex(target_temperature)
+            
+            logger.debug(
+                "Setting temperature %s and mode %s on device %s! Room %s - starting device mode %s (command: %s)",
+                temperature,
+                mode,
+                rf_address,
+                to_hex(thermostat.room_id),
+                thermostat.mode,
+                byte_cmd
+            )
+
             if self.__commander.send_radio_msg(byte_cmd):
                 thermostat.mode = mode
                 if temperature > 0:
@@ -333,9 +346,16 @@ class MaxCube(MaxDevice):
                     thermostat.target_temperature = thermostat.get_programmed_temp_at(
                         self._now()
                     )
+                #trigger an update
+                self.update()
                 return True
             return False
         else:
+            if mode == HVACMode.AUTO:
+                mode = MAX_DEVICE_MODE_AUTOMATIC
+            elif mode == HVACMode.HEAT:
+                mode = MAX_DEVICE_MODE_MANUAL
+
             if mode is None or temperature is None:
                 logger.error("Can't manage cube command without mode and temp")
                 return
@@ -345,7 +365,20 @@ class MaxCube(MaxDevice):
             target_temperature = int(temperature * 2) + (mode << 6)       
 
             byte_cmd = "000440000000" + rf_address + room + to_hex(target_temperature)
+
+            logger.debug(
+                "Setting temperature %s and mode %s on device %s! Room 00 - starting device mode %s (command: %s)",
+                temperature,
+                mode,
+                rf_address,
+                thermostat.mode,
+                byte_cmd
+            )
+
             if self.__commander.send_radio_msg(byte_cmd):
+                thermostat.mode = mode
+                #trigger an update
+                self.update()
                 return True
             return False
 

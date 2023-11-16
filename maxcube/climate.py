@@ -13,6 +13,7 @@ from .maxcube.device import (
 )
 
 from homeassistant.components.climate import (
+    ATTR_HVAC_MODE,
     PRESET_BOOST,
     PRESET_COMFORT,
     PRESET_ECO,
@@ -43,8 +44,12 @@ ATTR_MAX_VALVE = "max_valve"
 ATTR_VALVE_OFFSET = "valve_offset"
 ATTR_COMFORT_TEMP = "comfort_temp"
 ATTR_ECO_TEMP = "eco_temp"
+ATTR_ROOM = "room"
+ATTR_DEVICE_ID = "device_id"
+ATTR_DEVICE_RF_ADDRESS = "device_rf_address"
 PRESET_ON = "On"
 PRESET_WINDOW_OPEN = "Window Open"
+
 
 # There are two magic temperature values, which indicate:
 # Off (valve fully closed)
@@ -84,6 +89,7 @@ class MaxDeviceClimate(ClimateEntity):
 
     def __init__(self, handler, device):
         """Initialize MAX! Cube ClimateEntity."""
+        self._attr_room = device.room_id
         self.room = handler.cube.room_by_id(device.room_id)
         self._attr_name = f"{self.room.name} {device.name}"
         self._cubehandle = handler
@@ -205,7 +211,10 @@ class MaxDeviceClimate(ClimateEntity):
             raise ValueError(
                 f"No {ATTR_TEMPERATURE} parameter passed to set_temperature method."
             )
-        self._set_target(None, temp)
+        if ( kwargs.get(ATTR_HVAC_MODE) is not None ):
+            self._set_target(kwargs.get(ATTR_HVAC_MODE), temp)
+        else:
+            self._set_target(None, temp)
 
     @property
     def preset_mode(self):
@@ -254,7 +263,10 @@ class MaxDeviceClimate(ClimateEntity):
                     ATTR_MAX_VALVE: self._device.max_valve,
                     ATTR_VALVE_OFFSET: self._device.valve_offset,
                     ATTR_COMFORT_TEMP: self._device.comfort_temperature,
-                    ATTR_ECO_TEMP: self._device.eco_temperature
+                    ATTR_ECO_TEMP: self._device.eco_temperature,
+                    ATTR_ROOM: self._attr_room,
+                    ATTR_DEVICE_ID: self._attr_unique_id,
+                    ATTR_DEVICE_RF_ADDRESS: self._device.rf_address
                     }
         
         elif self._device.is_wallthermostat():
@@ -268,7 +280,10 @@ class MaxDeviceClimate(ClimateEntity):
             return {ATTR_VALVE_POSITION: valve_pos,
                     ATTR_WINDOW_OPEN_TEMP: self._device.temperature_window_open,
                     ATTR_COMFORT_TEMP: self._device.comfort_temperature,
-                    ATTR_ECO_TEMP: self._device.eco_temperature
+                    ATTR_ECO_TEMP: self._device.eco_temperature,
+                    ATTR_ROOM: self._attr_room,
+                    ATTR_DEVICE_ID: self._attr_unique_id,
+                    ATTR_DEVICE_RF_ADDRESS: self._device.rf_address
                     }        
         else:
             return {}
@@ -370,17 +385,6 @@ class MaxCubeClimate(ClimateEntity):
             raise ValueError(f"unsupported HVAC mode {hvac_mode}")
 
     def _set_target(self, mode: int, temp: float ) -> None: #THIS
-        """Set the mode and/or temperature of the thermostat.
-
-        @param mode: this is the mode to change to.
-        @param temp: the temperature to target.
-
-        Both parameters are optional. When mode is undefined, it keeps
-        the previous mode. When temp is undefined, it fetches the
-        temperature from the weekly schedule when mode is
-        MAX_DEVICE_MODE_AUTOMATIC and keeps the previous
-        temperature otherwise.
-        """
         with self._cubehandle.mutex:
             try:
                 self._cubehandle.cube.set_temperature_mode(self._device, temp, mode)
@@ -403,7 +407,10 @@ class MaxCubeClimate(ClimateEntity):
                 f"No {ATTR_TEMPERATURE} parameter passed to set_temperature method."
             )
         self._device.target_temperature = temp
-        self._set_target(self._device.mode, temp)
+        if ( kwargs.get(ATTR_HVAC_MODE) is not None ):
+            self._set_target(kwargs.get(ATTR_HVAC_MODE), temp)
+        else:
+            self._set_target(self._device.mode, temp)
 
     @property
     def preset_mode(self):
@@ -447,7 +454,9 @@ class MaxCubeClimate(ClimateEntity):
         """Return the optional state attributes."""
         return {ATTR_WINDOW_OPEN_TEMP: self._device.temperature_window_open,
                 ATTR_COMFORT_TEMP: self._device.comfort_temperature,
-                ATTR_ECO_TEMP: self._device.eco_temperature
+                ATTR_ECO_TEMP: self._device.eco_temperature,
+                ATTR_DEVICE_ID: self._attr_unique_id,
+                ATTR_DEVICE_RF_ADDRESS: self._device.rf_address
                 }
        
     def update(self) -> None:
