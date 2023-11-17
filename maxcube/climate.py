@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import time
 import socket
 from typing import Any
 
@@ -173,6 +174,8 @@ class MaxDeviceClimate(ClimateEntity):
                 self._cubehandle.cube.set_temperature_mode(self._device, temp, mode)
             except (socket.timeout, OSError):
                 _LOGGER.error("Setting HVAC mode failed")
+        time.sleep(2)
+        self.update()
 
     @property
     def hvac_action(self) -> HVACAction | None:
@@ -390,7 +393,8 @@ class MaxCubeClimate(ClimateEntity):
                 self._cubehandle.cube.set_temperature_mode(self._device, temp, mode)
             except (socket.timeout, OSError):
                 _LOGGER.error("Setting HVAC mode failed")
-        pass
+        time.sleep(2)
+        self.update()
 
     @property
     def target_temperature(self):
